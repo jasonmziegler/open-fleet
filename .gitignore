@@ -1,0 +1,153 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+pip-wheel-metadata/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Virtual Environments
+venv/
+env/
+ENV/
+env.bak/
+venv.bak/
+.venv/
+
+# Secrets & Credentials (CRITICAL - NEVER COMMIT THESE)
+.env
+.env.local
+.env.*.local
+*.key
+*.pem
+credentials.json
+token.json
+client_secret*.json
+secrets/
+.secrets/
+
+# API Keys & OAuth Tokens
+gmail_token.json
+slack_token.json
+oauth_credentials/
+api_keys/
+
+# LM Studio / Local Models
+models/
+*.gguf
+*.bin
+lm-studio/
+
+# Logs
+*.log
+logs/
+*.log.*
+
+# Database
+*.db
+*.sqlite
+*.sqlite3
+db.sqlite3
+
+# IDE & Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# OS Files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+desktop.ini
+
+# Jupyter Notebooks
+.ipynb_checkpoints/
+*.ipynb
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+.nox/
+
+# mypy
+.mypy_cache/
+.dmypy.json
+dmypy.json
+
+# Pyre type checker
+.pyre/
+
+# pytype static type analyzer
+.pytype/
+
+# Cython debug symbols
+cython_debug/
+
+# Local Configuration
+config.local.yaml
+config.local.json
+local_settings.py
+
+# Temporary Files
+tmp/
+temp/
+*.tmp
+*.bak
+
+# Claude Code
+.claude/cache/
+.claude/logs/
+
+# BMAD (keep structure, ignore cache)
+_bmad-output/cache/
+
+# Node modules (if using any JS tools)
+node_modules/
+package-lock.json
+yarn.lock
+
+# Cloudflare Tunnel
+cloudflared.exe
+*.tunnel
+
+# Backup files
+*.backup
+*~
+
+# Email cache (if caching Gmail data locally)
+email_cache/
+gmail_cache/
+
+# Screenshots (optional - uncomment if you don't want to commit screenshots)
+# screenshots/
+
+# Demo/Test Data (optional)
+# test_emails/
+# sample_data/
