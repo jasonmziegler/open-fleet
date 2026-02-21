@@ -58,8 +58,8 @@ git config --list
 
 **Expected output:**
 ```
-user.name=Jason Ziegler
-user.email=jason@insightfulautomation.com
+user.name=Firstname Lastname
+user.email=youremail@email.com
 ...
 ```
 
