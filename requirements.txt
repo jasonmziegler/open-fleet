@@ -1,0 +1,19 @@
+# Slack Integration
+slack-bolt==1.27.0
+slack-sdk==3.40.1
+
+# Gmail API
+google-api-python-client==2.190.0
+google-auth-oauthlib==1.2.4
+
+# LLM Integration
+google-genai==1.65.0
+
+# HTTP & Async
+aiohttp==3.11.11
+
+# Environment Variables
+python-dotenv==1.2.1
+
+# Data Validation
+pydantic==2.12.5

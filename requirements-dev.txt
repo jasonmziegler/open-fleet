@@ -1,0 +1,8 @@
+# Testing
+pytest==9.0.2
+
+# Formatting
+black==26.1.0
+
+# Linting (replaces flake8)
+ruff==0.15.1
