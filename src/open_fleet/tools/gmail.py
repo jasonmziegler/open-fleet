@@ -1,16 +1,20 @@
 # src/open_fleet/tools/gmail.py
-"""Gmail client — authentication, fetch, and pagination.
+"""Gmail client — authentication, fetch, pagination, and parsing.
 
 Story 2.1: credential loading and GmailClient initialisation.
 Story 2.2: fetch_emails() with timeframe parsing and nextPageToken pagination.
-Stories 2.3-2.4: parse_email() and rate-limit handling.
+Story 2.3: parse_email() — subject, sender, timestamp, body extraction.
+Story 2.4: rate-limit handling.
 """
 from __future__ import annotations
 
 import asyncio
+import base64
+import html
 import logging
 import re
 from datetime import datetime, timedelta, timezone
+from html.parser import HTMLParser
 from pathlib import Path
 
 from google.auth.exceptions import RefreshError, TransportError
@@ -27,6 +31,74 @@ GMAIL_SCOPES = ["https://www.googleapis.com/auth/gmail.readonly"]
 
 # Gmail API page size (maximum allowed)
 _PAGE_SIZE = 500
+
+
+# ---------------------------------------------------------------------------
+# HTML stripping (for text/html fallback bodies)
+# ---------------------------------------------------------------------------
+
+class _HTMLStripper(HTMLParser):
+    """Minimal HTML → plain-text converter."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self._parts: list[str] = []
+
+    def handle_data(self, data: str) -> None:
+        self._parts.append(data)
+
+    def get_text(self) -> str:
+        return " ".join(self._parts)
+
+
+def _strip_html(html_content: str) -> str:
+    stripper = _HTMLStripper()
+    stripper.feed(html.unescape(html_content))
+    return re.sub(r"\s+", " ", stripper.get_text()).strip()
+
+
+def _decode_body(data: str) -> str:
+    """Decode a base64url-encoded Gmail message body part."""
+    if not data:
+        return ""
+    # Gmail uses base64url without padding — add padding before decoding
+    try:
+        return base64.urlsafe_b64decode(data + "==").decode("utf-8", errors="replace")
+    except Exception:
+        return ""
+
+
+def _extract_body(payload: dict) -> str:
+    """Recursively extract the best available plain-text body from a payload."""
+    mime_type = payload.get("mimeType", "")
+
+    if mime_type == "text/plain":
+        return _decode_body(payload.get("body", {}).get("data", ""))
+
+    if mime_type == "text/html":
+        return _strip_html(_decode_body(payload.get("body", {}).get("data", "")))
+
+    if mime_type.startswith("multipart/"):
+        parts = payload.get("parts", [])
+
+        # Prefer text/plain
+        for part in parts:
+            if part.get("mimeType") == "text/plain":
+                return _decode_body(part.get("body", {}).get("data", ""))
+
+        # Fall back to text/html
+        for part in parts:
+            if part.get("mimeType") == "text/html":
+                return _strip_html(_decode_body(part.get("body", {}).get("data", "")))
+
+        # Recurse into nested multipart parts (e.g. multipart/mixed wrapping multipart/alternative)
+        for part in parts:
+            if part.get("mimeType", "").startswith("multipart/"):
+                result = _extract_body(part)
+                if result:
+                    return result
+
+    return ""
 
 
 def _parse_timeframe(timeframe: str) -> datetime:
@@ -182,6 +254,51 @@ class GmailClient:
             full_messages.append(msg)
 
         return full_messages
+
+    @staticmethod
+    def parse_email(message: dict) -> dict:
+        """Parse a raw Gmail API message dict into a structured dict.
+
+        Extracts subject, sender (display name + address from the From: header),
+        timestamp (UTC ISO8601), and plain-text body.
+
+        Body extraction priority:
+          1. text/plain part (used as-is)
+          2. text/html part (HTML tags stripped)
+          3. Empty string if neither is present
+
+        Raw body content is returned in memory only — it is never written to disk
+        (NFR7, FR33). Callers must not persist the returned 'body' value.
+
+        Args:
+            message: Full Gmail API message resource dict (format="full").
+
+        Returns:
+            Dict with keys: subject, sender, timestamp, body.
+        """
+        payload = message.get("payload", {})
+        headers = {
+            h["name"].lower(): h["value"]
+            for h in payload.get("headers", [])
+        }
+
+        subject = headers.get("subject", "(no subject)")
+        sender = headers.get("from", "(unknown sender)")
+
+        # internalDate is milliseconds since Unix epoch (UTC)
+        internal_date_ms = int(message.get("internalDate", 0))
+        timestamp = datetime.fromtimestamp(
+            internal_date_ms / 1000, tz=timezone.utc
+        ).isoformat()
+
+        body = _extract_body(payload)
+
+        return {
+            "subject": subject,
+            "sender": sender,
+            "timestamp": timestamp,
+            "body": body,
+        }
 
     # ------------------------------------------------------------------
     # Internal helpers
