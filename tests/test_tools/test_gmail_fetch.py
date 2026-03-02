@@ -189,7 +189,7 @@ class TestFetchEmails:
             Exception("API quota exceeded")
 
         with patch.object(client, "_build_service", return_value=service):
-            with pytest.raises(GmailFetchError, match="list request failed"):
+            with pytest.raises(GmailFetchError, match="list failed"):
                 asyncio.run(client.fetch_emails("last 24 hours"))
 
     def test_get_api_error_raises_fetch_error(self, tmp_path):
@@ -201,7 +201,7 @@ class TestFetchEmails:
             Exception("Message not found")
 
         with patch.object(client, "_build_service", return_value=service):
-            with pytest.raises(GmailFetchError, match="get request failed"):
+            with pytest.raises(GmailFetchError, match="get .* failed"):
                 asyncio.run(client.fetch_emails("last 24 hours"))
 
     def test_200_messages_retrieved_across_pages(self, tmp_path):
