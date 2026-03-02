@@ -13,6 +13,7 @@ import base64
 import html
 import logging
 import re
+from collections.abc import Awaitable, Callable
 from datetime import datetime, timedelta, timezone
 from html.parser import HTMLParser
 from pathlib import Path
@@ -21,8 +22,9 @@ from google.auth.exceptions import RefreshError, TransportError
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
+from googleapiclient.errors import HttpError
 
-from open_fleet.exceptions import GmailAuthError, GmailFetchError
+from open_fleet.exceptions import GmailAuthError, GmailFetchError, GmailRateLimitError
 
 logger = logging.getLogger("open_fleet.tools.gmail")
 
@@ -31,6 +33,64 @@ GMAIL_SCOPES = ["https://www.googleapis.com/auth/gmail.readonly"]
 
 # Gmail API page size (maximum allowed)
 _PAGE_SIZE = 500
+
+# Exponential backoff delays (seconds) for HTTP 429 retries: 1s, 2s, 4s
+_RETRY_DELAYS = [1, 2, 4]
+
+# Notify callback type: accepts a message string, returns an awaitable
+_NotifyFn = Callable[[str], Awaitable[None]]
+
+
+async def _execute_with_retry(
+    sync_fn: Callable,
+    notify: _NotifyFn | None,
+    label: str,
+) -> dict:
+    """Run a synchronous Gmail API call with exponential backoff on HTTP 429.
+
+    Args:
+        sync_fn: Zero-argument callable wrapping the .execute() call.
+        notify:  Optional async callback to send a Slack warning before each retry.
+        label:   Short description used in error messages (e.g. "list", "get msg123").
+
+    Returns:
+        The dict returned by the Gmail API on success.
+
+    Raises:
+        GmailRateLimitError: All retry attempts exhausted on HTTP 429.
+        GmailFetchError:     Any non-429 HTTP error or unexpected exception.
+    """
+    loop = asyncio.get_running_loop()
+    attempts = 0
+
+    for attempt_idx in range(len(_RETRY_DELAYS) + 1):
+        if attempt_idx > 0:
+            delay = _RETRY_DELAYS[attempt_idx - 1]
+            warning = (
+                f"⚠️ Gmail API rate limit hit — extraction will retry in {delay} seconds"
+            )
+            logger.warning(warning)
+            if notify is not None:
+                await notify(warning)
+            await asyncio.sleep(delay)
+
+        attempts += 1
+        try:
+            return await loop.run_in_executor(None, sync_fn)
+        except HttpError as exc:
+            if exc.resp.status == 429:
+                continue  # retry with backoff
+            raise GmailFetchError(
+                f"Gmail API {label} failed (HTTP {exc.resp.status}): {exc.reason}"
+            ) from exc
+        except Exception as exc:
+            raise GmailFetchError(
+                f"Gmail API {label} failed: {exc}"
+            ) from exc
+
+    raise GmailRateLimitError(
+        f"Gmail API rate limit — extraction could not complete after {attempts} attempts"
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -174,22 +234,33 @@ class GmailClient:
     # Public API
     # ------------------------------------------------------------------
 
-    async def fetch_emails(self, timeframe: str) -> list[dict]:
+    async def fetch_emails(
+        self,
+        timeframe: str,
+        notify: _NotifyFn | None = None,
+    ) -> list[dict]:
         """Fetch all full message dicts for emails within the given timeframe.
 
         Paginates until all matching messages are retrieved (no artificial cap).
         Synchronous google-api-python-client calls are wrapped in
         run_in_executor so the asyncio event loop is never blocked.
 
+        HTTP 429 (rate limit) errors trigger exponential backoff with delays of
+        1s, 2s, 4s. Before each retry, `notify` is called (if provided) so the
+        caller can surface a warning to the user (e.g. via Slack).
+
         Args:
             timeframe: Human-readable window string, e.g. "last 24 hours".
+            notify:    Optional async callback for rate-limit warnings.
+                       Signature: async def notify(message: str) -> None.
 
         Returns:
             List of full Gmail message resource dicts (format="full").
 
         Raises:
-            GmailFetchError: On any non-rate-limit API or network error.
-            ValueError: If the timeframe string cannot be parsed.
+            GmailRateLimitError: All retry attempts exhausted on HTTP 429.
+            GmailFetchError:     Any non-rate-limit API or network error.
+            ValueError:          If the timeframe string cannot be parsed.
         """
         since_dt = _parse_timeframe(timeframe)
         query = f"after:{int(since_dt.timestamp())}"
@@ -198,7 +269,7 @@ class GmailClient:
             extra={"timeframe": timeframe, "query": query},
         )
 
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         service = await loop.run_in_executor(None, self._build_service)
 
         # --- Collect all message IDs via paginated list ---
@@ -206,26 +277,21 @@ class GmailClient:
         page_token: str | None = None
 
         while True:
-            try:
-                result = await loop.run_in_executor(
-                    None,
-                    lambda pt=page_token: (
-                        service.users()
-                        .messages()
-                        .list(
-                            userId="me",
-                            q=query,
-                            pageToken=pt,
-                            maxResults=_PAGE_SIZE,
-                        )
-                        .execute()
-                    ),
-                )
-            except Exception as exc:
-                raise GmailFetchError(
-                    f"Gmail API list request failed: {exc}"
-                ) from exc
-
+            result = await _execute_with_retry(
+                lambda pt=page_token: (
+                    service.users()
+                    .messages()
+                    .list(
+                        userId="me",
+                        q=query,
+                        pageToken=pt,
+                        maxResults=_PAGE_SIZE,
+                    )
+                    .execute()
+                ),
+                notify,
+                label="list",
+            )
             message_stubs.extend(result.get("messages", []))
             page_token = result.get("nextPageToken")
             if not page_token:
@@ -236,21 +302,16 @@ class GmailClient:
         # --- Fetch full content for each message ID ---
         full_messages: list[dict] = []
         for stub in message_stubs:
-            try:
-                msg = await loop.run_in_executor(
-                    None,
-                    lambda mid=stub["id"]: (
-                        service.users()
-                        .messages()
-                        .get(userId="me", id=mid, format="full")
-                        .execute()
-                    ),
-                )
-            except Exception as exc:
-                raise GmailFetchError(
-                    f"Gmail API get request failed for message {stub['id']}: {exc}"
-                ) from exc
-
+            msg = await _execute_with_retry(
+                lambda mid=stub["id"]: (
+                    service.users()
+                    .messages()
+                    .get(userId="me", id=mid, format="full")
+                    .execute()
+                ),
+                notify,
+                label=f"get {stub['id']}",
+            )
             full_messages.append(msg)
 
         return full_messages
