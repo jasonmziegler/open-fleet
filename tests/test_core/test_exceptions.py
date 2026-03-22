@@ -32,8 +32,8 @@ def test_config_error_hierarchy():
 
 def test_catching_base_catches_all_subclasses():
     subclasses = [
-        GmailAuthError, GmailRateLimitError, GmailFetchError,
-        LLMTimeoutError, LLMValidationError, LLMProviderError,
+        GmailError, GmailAuthError, GmailRateLimitError, GmailFetchError,
+        LLMError, LLMTimeoutError, LLMValidationError, LLMProviderError,
         ConfigError,
     ]
     for exc_class in subclasses:
@@ -41,12 +41,18 @@ def test_catching_base_catches_all_subclasses():
             raise exc_class("test")
 
 
-def test_exceptions_carry_message():
-    err = GmailAuthError("token.json not found")
-    assert str(err) == "token.json not found"
-
-    err = LLMTimeoutError("elapsed=31s, timeout=30s")
-    assert str(err) == "elapsed=31s, timeout=30s"
-
-    err = ConfigError("SLACK_BOT_TOKEN is missing")
-    assert str(err) == "SLACK_BOT_TOKEN is missing"
+@pytest.mark.parametrize("exc_class,msg", [
+    (OpenFleetError, "base error"),
+    (GmailError, "gmail base"),
+    (GmailAuthError, "token.json not found"),
+    (GmailRateLimitError, "HTTP 429"),
+    (GmailFetchError, "connection reset"),
+    (LLMError, "llm base"),
+    (LLMTimeoutError, "elapsed=31s, timeout=30s"),
+    (LLMValidationError, "schema mismatch"),
+    (LLMProviderError, "provider unreachable"),
+    (ConfigError, "SLACK_BOT_TOKEN is missing"),
+])
+def test_exceptions_carry_message(exc_class, msg):
+    err = exc_class(msg)
+    assert str(err) == msg
