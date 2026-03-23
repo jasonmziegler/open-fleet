@@ -6,7 +6,7 @@ All inputs and outputs are plain Python types and Pydantic models only (NFR16).
 """
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
 
 from open_fleet.llm.schemas import ActionItem, ExtractionResult
 
@@ -50,10 +50,10 @@ def _display_name(sender: str) -> str:
 def _format_timestamp(email_timestamp: str) -> str:
     """Format an ISO8601 UTC timestamp as 'Mon 01 Mar 09:00 UTC'."""
     try:
-        ts = datetime.fromisoformat(email_timestamp)
+        ts = datetime.fromisoformat(email_timestamp).astimezone(timezone.utc)
         return ts.strftime("%a %d %b %H:%M UTC")
     except (ValueError, TypeError):
-        return email_timestamp
+        return str(email_timestamp)
 
 
 def _format_item(item: ActionItem) -> str:
@@ -63,7 +63,8 @@ def _format_item(item: ActionItem) -> str:
     sentiment_str = (
         f" | 💬 {item.sentiment}" if item.sentiment in ("frustrated", "escalated") else ""
     )
-    return f"• *{name}* — {time_str}{sentiment_str}\n  {item.context}"
+    context = item.context[:100]
+    return f"• *{name}* — {time_str}{sentiment_str}\n  {context}"
 
 
 def _assemble(chunks: list[str]) -> list[str]:

@@ -121,6 +121,17 @@ def test_invalid_timeout_raises(monkeypatch, token_file):
     assert "LM_STUDIO_TIMEOUT_SECS" in str(exc_info.value)
 
 
+@pytest.mark.parametrize("bad_value", ["0", "-1", "-100"])
+def test_non_positive_timeout_raises(monkeypatch, token_file, bad_value):
+    _set_required(monkeypatch, token_file)
+    monkeypatch.setenv("LM_STUDIO_TIMEOUT_SECS", bad_value)
+
+    with pytest.raises(ConfigError) as exc_info:
+        load(env_file=None)
+
+    assert "LM_STUDIO_TIMEOUT_SECS" in str(exc_info.value)
+
+
 # --- Config injection pattern ---
 
 def test_config_is_frozen(monkeypatch, token_file):

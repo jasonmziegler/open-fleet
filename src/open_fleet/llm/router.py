@@ -34,13 +34,22 @@ class LLMRouter:
     """Routes extraction requests across LM Studio (primary) and Gemini (fallback).
 
     Args:
-        lmstudio: Configured LMStudioProvider instance.
-        gemini:   Configured GeminiProvider instance.
+        lmstudio:       Configured LMStudioProvider instance.
+        gemini:         Configured GeminiProvider instance.
+        max_batch_size: Max emails per LLM call (default 10). Larger batches
+                        are split and results merged. Keeps prompts within
+                        local model context windows.
     """
 
-    def __init__(self, lmstudio: LMStudioProvider, gemini: GeminiProvider) -> None:
+    def __init__(
+        self,
+        lmstudio: LMStudioProvider,
+        gemini: GeminiProvider,
+        max_batch_size: int = 10,
+    ) -> None:
         self._lmstudio = lmstudio
         self._gemini = gemini
+        self._max_batch_size = max_batch_size
 
     async def run_extraction(
         self,
@@ -49,6 +58,9 @@ class LLMRouter:
         notify: _NotifyFn | None = None,
     ) -> ExtractionResult:
         """Extract action items, routing through providers with retry and fallback.
+
+        When email_batch exceeds max_batch_size, emails are split into chunks
+        and each chunk is extracted independently. Results are merged at the end.
 
         Args:
             email_batch: List of dicts with keys: subject, sender, timestamp, body.
@@ -64,36 +76,71 @@ class LLMRouter:
             LLMProviderError:   Active provider is unreachable or returned an error.
             LLMTimeoutError:    Active provider exceeded its timeout (LM Studio only).
         """
-        start = time.monotonic()
-        active_provider = "lmstudio"
+        chunks = [
+            email_batch[i : i + self._max_batch_size]
+            for i in range(0, len(email_batch), self._max_batch_size)
+        ]
+        if len(chunks) > 1:
+            logger.info(
+                "Splitting emails into batches",
+                extra={"total_emails": len(email_batch), "batch_count": len(chunks)},
+            )
 
-        try:
-            # ── Primary: LM Studio ──────────────────────────────────────────────
+        results: list[ExtractionResult] = []
+        for idx, chunk in enumerate(chunks):
+            start = time.monotonic()
+            active_provider = "lmstudio"
+
             try:
-                result = await self._try_with_retry(self._lmstudio, email_batch, timeframe)
-                self._log_run(active_provider, email_batch, result, start, error=None)
-                return result
-            except (LLMTimeoutError, LLMProviderError) as exc:
-                logger.warning(
-                    "LM Studio unavailable — falling back to Gemini",
-                    extra={"provider": "lmstudio", "reason": str(exc)},
-                )
-                if notify is not None:
-                    await notify(
-                        "⚠️ LM Studio unavailable — falling back to Gemini for this run"
-                    )
+                # ── Primary: LM Studio ──────────────────────────────────────
+                try:
+                    result = await self._try_with_retry(self._lmstudio, chunk, timeframe)
+                    self._log_run(active_provider, chunk, result, start, error=None)
+                    results.append(result)
+                    continue
+                except (LLMTimeoutError, LLMProviderError) as exc:
+                    # Only notify on the first fallback to avoid spamming
+                    if idx == 0:
+                        logger.warning(
+                            "LM Studio unavailable — falling back to Gemini",
+                            extra={"provider": "lmstudio", "reason": str(exc)},
+                        )
+                        if notify is not None:
+                            await notify(
+                                "⚠️ LM Studio unavailable — falling back to Gemini for this run"
+                            )
 
-            # ── Fallback: Gemini ────────────────────────────────────────────────
-            active_provider = "gemini"
-            result = await self._try_with_retry(self._gemini, email_batch, timeframe)
-            self._log_run(active_provider, email_batch, result, start, error=None)
-            return result
+                # ── Fallback: Gemini ────────────────────────────────────────
+                active_provider = "gemini"
+                result = await self._try_with_retry(self._gemini, chunk, timeframe)
+                self._log_run(active_provider, chunk, result, start, error=None)
+                results.append(result)
 
-        except Exception as exc:
-            self._log_run(active_provider, email_batch, None, start, error=exc)
-            raise
+            except Exception as exc:
+                self._log_run(active_provider, chunk, None, start, error=exc)
+                raise
+
+        return self._merge_results(results, timeframe, len(email_batch))
 
     # ── Internal helpers ────────────────────────────────────────────────────────
+
+    @staticmethod
+    def _merge_results(
+        results: list[ExtractionResult],
+        timeframe: str,
+        total_emails: int,
+    ) -> ExtractionResult:
+        """Merge multiple batch results into a single ExtractionResult."""
+        if len(results) == 1:
+            return results[0]
+        all_items = []
+        for r in results:
+            all_items.extend(r.action_items)
+        return ExtractionResult(
+            action_items=all_items,
+            emails_scanned=total_emails,
+            timeframe=timeframe,
+        )
 
     @staticmethod
     async def _try_with_retry(provider, email_batch: list[dict], timeframe: str) -> ExtractionResult:

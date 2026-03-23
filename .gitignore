@@ -42,6 +42,7 @@ token.json
 client_secret*.json
 secrets/
 .secrets/
+credentials.json
 
 # API Keys & OAuth Tokens
 gmail_token.json

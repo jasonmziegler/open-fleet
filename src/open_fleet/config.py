@@ -28,6 +28,7 @@ _REQUIRED: dict[str, str] = {
 _DEFAULTS: dict[str, str] = {
     "LM_STUDIO_BASE_URL": "http://localhost:1234/v1",
     "LM_STUDIO_TIMEOUT_SECS": "30",
+    "LLM_BATCH_SIZE": "10",
     "GMAIL_TOKEN_PATH": "token.json",
     "LOG_DIR": "logs",
 }
@@ -39,11 +40,12 @@ class Config:
     slack_bot_token: str
     slack_app_token: str
     gemini_api_key: str
-    # Optional with defaults
-    lm_studio_base_url: str = "http://localhost:1234/v1"
-    lm_studio_timeout_secs: int = 30
-    gmail_token_path: Path = field(default_factory=lambda: Path("token.json"))
-    log_dir: Path = field(default_factory=lambda: Path("logs"))
+    # Optional with defaults — sourced from _DEFAULTS to avoid duplication
+    lm_studio_base_url: str = _DEFAULTS["LM_STUDIO_BASE_URL"]
+    lm_studio_timeout_secs: int = int(_DEFAULTS["LM_STUDIO_TIMEOUT_SECS"])
+    llm_batch_size: int = int(_DEFAULTS["LLM_BATCH_SIZE"])
+    gmail_token_path: Path = field(default_factory=lambda: Path(_DEFAULTS["GMAIL_TOKEN_PATH"]))
+    log_dir: Path = field(default_factory=lambda: Path(_DEFAULTS["LOG_DIR"]))
 
 
 def load(env_file: str | Path | None = ".env") -> Config:
@@ -81,6 +83,22 @@ def load(env_file: str | Path | None = ".env") -> Config:
         raise ConfigError(
             f"LM_STUDIO_TIMEOUT_SECS must be an integer, got: {timeout_raw!r}"
         )
+    if lm_studio_timeout_secs <= 0:
+        raise ConfigError(
+            f"LM_STUDIO_TIMEOUT_SECS must be a positive integer, got: {lm_studio_timeout_secs}"
+        )
+
+    batch_raw = os.environ.get("LLM_BATCH_SIZE", _DEFAULTS["LLM_BATCH_SIZE"])
+    try:
+        llm_batch_size = int(batch_raw)
+    except ValueError:
+        raise ConfigError(
+            f"LLM_BATCH_SIZE must be an integer, got: {batch_raw!r}"
+        )
+    if llm_batch_size <= 0:
+        raise ConfigError(
+            f"LLM_BATCH_SIZE must be a positive integer, got: {llm_batch_size}"
+        )
 
     gmail_token_path = Path(
         os.environ.get("GMAIL_TOKEN_PATH", _DEFAULTS["GMAIL_TOKEN_PATH"])
@@ -100,6 +118,7 @@ def load(env_file: str | Path | None = ".env") -> Config:
         gemini_api_key=os.environ["GEMINI_API_KEY"],
         lm_studio_base_url=lm_studio_base_url,
         lm_studio_timeout_secs=lm_studio_timeout_secs,
+        llm_batch_size=llm_batch_size,
         gmail_token_path=gmail_token_path,
         log_dir=log_dir,
     )

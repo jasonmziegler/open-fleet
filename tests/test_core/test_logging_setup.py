@@ -1,9 +1,6 @@
 """Tests for Story 1.4: Structured Logging Infrastructure."""
 import json
 import logging
-import sys
-from io import StringIO
-from pathlib import Path
 
 import pytest
 
@@ -114,3 +111,36 @@ def test_configure_called_twice_does_not_duplicate_handlers():
 def test_does_not_propagate_to_root_logger():
     configure(log_dir=None)
     assert logging.getLogger("open_fleet").propagate is False
+
+
+# --- Extra fields (architecture: Log Record Schema) ---
+
+def test_extra_fields_included_in_json_output(capsys):
+    configure(log_dir=None)
+    logging.getLogger("open_fleet.test").info(
+        "extraction_complete",
+        extra={
+            "provider": "lmstudio",
+            "email_count": 187,
+            "action_item_count": 14,
+            "duration_ms": 23450,
+            "error": None,
+        },
+    )
+
+    record = json.loads(capsys.readouterr().out.strip())
+    assert record["provider"] == "lmstudio"
+    assert record["email_count"] == 187
+    assert record["action_item_count"] == 14
+    assert record["duration_ms"] == 23450
+    assert record["error"] is None
+
+
+# --- UTC ISO8601 timestamp ---
+
+def test_timestamp_includes_utc_offset(capsys):
+    configure(log_dir=None)
+    logging.getLogger("open_fleet.test").info("tz check")
+
+    record = json.loads(capsys.readouterr().out.strip())
+    assert record["timestamp"].endswith("+00:00")

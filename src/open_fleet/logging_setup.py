@@ -21,9 +21,11 @@ import json
 import logging
 import logging.handlers
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
 
 _LOG_FORMAT_FIELDS = ("timestamp", "level", "module")
+_BUILTIN_ATTRS = frozenset(vars(logging.LogRecord("", 0, "", 0, "", (), None)))
 _MAX_BYTES = 10 * 1024 * 1024  # 10 MB
 _BACKUP_COUNT = 7
 _LOG_FILENAME = "open_fleet.log"
@@ -33,14 +35,19 @@ class _JsonFormatter(logging.Formatter):
     """Emit each log record as a single-line JSON object."""
 
     def format(self, record: logging.LogRecord) -> str:
+        dt = datetime.fromtimestamp(record.created, tz=timezone.utc)
         payload: dict = {
-            "timestamp": self.formatTime(record, datefmt="%Y-%m-%dT%H:%M:%S"),
+            "timestamp": dt.strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "+00:00",
             "level": record.levelname,
             "module": record.name,
             "message": record.getMessage(),
         }
         if record.exc_info:
             payload["exc_info"] = self.formatException(record.exc_info)
+        # Include extra fields passed via logger.info(..., extra={...})
+        for key, val in vars(record).items():
+            if key not in _BUILTIN_ATTRS and key not in payload:
+                payload[key] = val
         return json.dumps(payload)
 
 

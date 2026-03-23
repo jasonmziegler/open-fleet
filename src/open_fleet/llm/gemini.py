@@ -23,7 +23,7 @@ from open_fleet.llm.schemas import ExtractionResult
 logger = logging.getLogger("open_fleet.llm.gemini")
 
 PROVIDER_NAME = "gemini"
-_MODEL = "gemini-2.0-flash"
+_MODEL = "gemini-2.5-flash"
 
 
 class GeminiProvider:

@@ -108,7 +108,14 @@ class LMStudioProvider:
                 {"role": "user", "content": _build_user_message(email_batch, timeframe)},
             ],
             "temperature": 0.1,
-            "response_format": {"type": "json_object"},
+            "response_format": {
+                "type": "json_schema",
+                "json_schema": {
+                    "name": "extraction_result",
+                    "strict": True,
+                    "schema": ExtractionResult.model_json_schema(),
+                },
+            },
         }
 
         url = f"{self._base_url}/chat/completions"

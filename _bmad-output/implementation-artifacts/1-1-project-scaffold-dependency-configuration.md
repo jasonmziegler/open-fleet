@@ -1,6 +1,6 @@
 # Story 1.1: Project Scaffold & Dependency Configuration
 
-Status: review
+Status: Done
 
 ## Story
 

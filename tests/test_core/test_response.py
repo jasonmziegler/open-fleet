@@ -136,6 +136,23 @@ class TestGroupOrdering:
         text = _full_text(_result(items))
         assert text.index("This Week") < text.index("No Deadline")
 
+    def test_all_five_groups_render_in_correct_order(self):
+        items = [
+            _item(priority="no_deadline", sentiment="neutral", description="Bucket 4"),
+            _item(priority="this_week", sentiment="neutral", description="Bucket 3"),
+            _item(priority="this_week", deadline="2026-03-07T17:00:00+00:00",
+                  sentiment="neutral", description="Bucket 2"),
+            _item(priority="this_week", sentiment="frustrated", description="Bucket 1"),
+            _item(priority="urgent", sentiment="neutral", description="Bucket 0"),
+        ]
+        text = _full_text(_result(items))
+        pos_urgent = text.index("Urgent")
+        pos_needs = text.index("Needs Response")
+        pos_approach = text.index("Approaching")
+        pos_week = text.index("This Week")
+        pos_no_dl = text.index("No Deadline")
+        assert pos_urgent < pos_needs < pos_approach < pos_week < pos_no_dl
+
     def test_empty_groups_are_omitted(self):
         items = [_item(priority="urgent")]
         text = _full_text(_result(items))
@@ -191,6 +208,11 @@ class TestItemRendering:
         text = _full_text(_result([item]))
         assert "neutral" not in text
 
+    def test_item_renders_with_empty_context(self):
+        item = _item(context="")
+        text = _full_text(_result([item]))
+        assert "•" in text  # item still renders
+
     def test_item_includes_formatted_timestamp(self):
         item = _item(email_timestamp="2026-03-01T09:00:00+00:00")
         text = _full_text(_result([item]))
@@ -213,6 +235,9 @@ class TestDisplayName:
     def test_returns_email_when_no_display_name_before_bracket(self):
         assert _display_name("<alice@acme.com>") == "alice@acme.com"
 
+    def test_returns_empty_string_for_empty_input(self):
+        assert _display_name("") == ""
+
 
 class TestFormatTimestamp:
     def test_formats_iso_timestamp_human_readable(self):
@@ -220,9 +245,20 @@ class TestFormatTimestamp:
         assert "Mar" in result
         assert "09:00" in result
 
+    def test_converts_non_utc_offset_to_utc(self):
+        # 09:00 EST (-05:00) should become 14:00 UTC
+        result = _format_timestamp("2026-03-01T09:00:00-05:00")
+        assert "14:00" in result
+        assert "UTC" in result
+
     def test_returns_raw_on_invalid_input(self):
         result = _format_timestamp("not-a-date")
         assert result == "not-a-date"
+
+    def test_returns_string_on_none_input(self):
+        result = _format_timestamp(None)
+        assert result == "None"
+        assert isinstance(result, str)
 
 
 # ---------------------------------------------------------------------------

@@ -40,21 +40,21 @@ tracking_system: file-system
 story_location: _bmad-output/implementation-artifacts
 
 development_status:
-  epic-1: in-progress
-  1-1-project-scaffold-dependency-configuration: review
-  1-2-typed-exception-hierarchy: backlog
-  1-3-configuration-loading-startup-validation: backlog
-  1-4-structured-logging-infrastructure: backlog
+  epic-1: done
+  1-1-project-scaffold-dependency-configuration: done
+  1-2-typed-exception-hierarchy: done
+  1-3-configuration-loading-startup-validation: done
+  1-4-structured-logging-infrastructure: done
   epic-1-retrospective: optional
 
-  epic-2: backlog
-  2-1-gmail-oauth-authentication-setup: backlog
-  2-2-gmail-email-fetch-pagination: backlog
-  2-3-email-content-parsing: backlog
-  2-4-gmail-rate-limit-handling: backlog
+  epic-2: done
+  2-1-gmail-oauth-authentication-setup: done
+  2-2-gmail-email-fetch-pagination: done
+  2-3-email-content-parsing: done
+  2-4-gmail-rate-limit-handling: done
   epic-2-retrospective: optional
 
-  epic-3: in-progress
+  epic-3: done
   3-1-pydantic-data-models-extraction-schema: done
   3-2-lm-studio-provider-integration: done
   3-3-gemini-fallback-provider-integration: done
@@ -62,7 +62,7 @@ development_status:
   3-5-action-item-extraction-prompt-accuracy-validation: done
   epic-3-retrospective: optional
 
-  epic-4: in-progress
+  epic-4: done
   4-1-response-formatter: done
   4-2-extraction-orchestrator: done
   4-3-slack-command-handler-end-to-end-wiring: done
@@ -70,7 +70,7 @@ development_status:
 
   epic-5: backlog
   5-1-windows-auto-start-crash-recovery: backlog
-  5-2-extraction-run-structured-logging: backlog
+  5-2-extraction-run-structured-logging: done  # already implemented in logging_setup.py + router FR19 fields
   5-3-gmail-oauth-token-expiry-monitoring: backlog
   5-4-gemini-quota-monitoring-alert: backlog
   epic-5-retrospective: optional

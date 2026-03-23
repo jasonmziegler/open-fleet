@@ -48,7 +48,7 @@ async def _run() -> None:
         timeout_secs=cfg.lm_studio_timeout_secs,
     )
     gemini = GeminiProvider(api_key=cfg.gemini_api_key)
-    router = LLMRouter(lmstudio=lmstudio, gemini=gemini)
+    router = LLMRouter(lmstudio=lmstudio, gemini=gemini, max_batch_size=cfg.llm_batch_size)
 
     # ── 4. Wire orchestrator ─────────────────────────────────────────────────
     orchestrator = Orchestrator(gmail_client=gmail_client, llm_router=router)

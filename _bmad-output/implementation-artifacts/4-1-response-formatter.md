@@ -1,6 +1,6 @@
 # Story 4.1: Response Formatter
 
-Status: review
+Status: done
 
 ## Story
 
@@ -210,9 +210,10 @@ claude-sonnet-4-6
 ### File List
 
 - `src/open_fleet/core/response.py` — ResponseFormatter class, _assign_bucket, _display_name, _format_timestamp, _format_item, _assemble
-- `tests/test_core/test_response.py` — 38 tests covering AC1–AC5 (TestHeader, TestBucketAssignment, TestGroupOrdering, TestItemRendering, TestDisplayName, TestFormatTimestamp, TestMessageSplitting, TestNoSlackImports)
+- `tests/test_core/test_response.py` — 43 tests covering AC1–AC5 (TestHeader, TestBucketAssignment, TestGroupOrdering, TestItemRendering, TestDisplayName, TestFormatTimestamp, TestMessageSplitting, TestNoSlackImports)
 
 ## Change Log
 
 - 2026-03-04: Story 4.1 created via create-story workflow. Implementation partially in progress (response.py modified, test_response.py untracked in working tree).
 - 2026-03-14: Code review complete. Fixed: removed unused `import pytest` (ruff F401), strengthened `test_item_omits_angle_bracket_email_when_name_present` to assert email address is absent from output. All 38 tests passing, ruff clean. Story status updated to review.
+- 2026-03-22: Senior dev review (adversarial). Fixed: (H1) `_format_timestamp` now converts to UTC via `.astimezone(timezone.utc)` before formatting — previously non-UTC offsets were formatted with wrong time but labeled "UTC"; (H2) `_format_item` now explicitly truncates context to 100 chars as defensive measure, not relying solely on schema validator; (L1) `_format_timestamp` fallback now returns `str(email_timestamp)` to guarantee str return type. Added 5 new tests: all-5-groups ordering, non-UTC timezone conversion, None timestamp, empty display name, empty context. 43 tests passing, ruff clean.
